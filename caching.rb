@@ -5,10 +5,32 @@ require 'uri'
 require 'vcr'
 require 'fakeweb'
 require 'digest/md5'
+require 'fog'
+
+class AWSCassettePersister
+  def initialize()
+    # TODO add in authentication
+    aws = Fog::Storage.new(
+	  :provider => 'AWS',
+	  :aws_access_key_id => '',
+	  :aws_secret_access_key => '')
+    @directory = aws.directories.get('pulse-cache')
+  end
+
+  def [](name)
+    @directory.files.get(name).body
+  end
+
+  def []=(name, content)
+    @directory.files.new(:key => name, :body => content).save
+  end
+end
 
 VCR.configure { |c|
   c.cassette_library_dir = 'tmp/'
   c.hook_into :fakeweb
+  c.cassette_persisters[:aws] = AWSCassettePersister.new()
+  c.default_cassette_options = { :persist_with => :aws }
   c.allow_http_connections_when_no_cassette = true
 }
 
@@ -32,11 +54,11 @@ class Caching
 
   	def run url
 	    digest = Digest::MD5.hexdigest(url)
-        puts "Hash: #{digest}"
-        VCR.use_cassette("#{digest}") do
-          page = @agent.get(url)
-          puts page.body
-        end
+            puts "Hash: #{digest}"
+            VCR.use_cassette("#{digest}") do
+              page = @agent.get(url)
+              puts page.body
+            end
   	end
 end
 
